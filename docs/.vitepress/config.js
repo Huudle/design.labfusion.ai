@@ -4,16 +4,14 @@ export default {
     "Documentation for labfusion.ai chemical recipe management system",
   themeConfig: {
     siteTitle: "labfusion.ai",
-    nav: [
-      { text: "Home", link: "/" },
-      { text: "Requirements", link: "/requirements" },
-      { text: "Database", link: "/entities" },
-    ],
     sidebar: [
       {
         text: "Documentation",
         items: [
           { text: "Requirements", link: "/requirements" },
+          { text: "Recipe Management", link: "/recipe-management" },
+          { text: "SDS System", link: "/sds-system" },
+          { text: "Architecture", link: "/architecture" },
           { text: "Database Entities", link: "/entities" },
         ],
       },

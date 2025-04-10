@@ -2,105 +2,81 @@
 
 ## Core Purpose
 
-The web app will:
+The conversational AI system will:
 
-1. **Enable chemists to create and refine chemical recipes for sale** (primary goal).
-2. **Educate novice chemists** with a focus on safety and recipe design.
-3. **Create an organizational memory** to store and leverage collective knowledge.
+1. **Enable chemists to create, manage, and refine chemical recipes through natural language interaction**, enforcing safety and standards (primary goal).
+2. **Educate newcomers** on safety and recipe design via conversational guidance and access to organizational knowledge.
+3. **Create and provide access to an organizational memory** by capturing and synthesizing interactions, recipe data, and experimental results.
 
 ## Functional Requirements
 
-### 1. Recipe Management
+### 1. Conversational AI Agent
 
-- **Purpose**: Core for creating sellable recipes and preserving organizational memory.
+- **Purpose**: Understand user requests, manage dialog, enforce standards, provide proactive guidance, and orchestrate actions.
 - **Requirements**:
-  - Create, edit, and save recipes with: Name, Description, Ingredients (materials + quantities), Steps, Conditions, Yield, Cost, Creator, Date, Status (e.g., "Draft," "Ready to Sell").
-  - Search/filter recipes by name, ingredient, yield, cost, or creator.
-  - Store all recipe versions (organizational memory).
-- **For Novices**: Tooltips/guides on recipe design (e.g., "Steps should be clear and repeatable").
+  - **Natural Language Understanding (NLU)**: Accurately interpret user text input to identify intents (e.g., `create_recipe`, `query_sds`, `check_inventory`) and extract relevant entities (e.g., recipe names, material names, quantities, safety terms).
+  - **Dialog Management**: Maintain conversation context, ask clarifying questions for ambiguous requests, handle multi-turn interactions.
+  - **Action Orchestration**: Trigger appropriate backend service APIs (Recipe, Inventory, SDS, Safety) based on understood intent and entities.
+  - **Response Generation**: Provide clear, concise, and relevant natural language responses to the user.
+  - **Confirmation**: For critical actions (e.g., finalizing SDS, changing recipe status), confirm user intent before proceeding.
+  - **Proactive Safety Checks**: During recipe creation/editing, analyze ingredients and steps to proactively warn users about known hazardous combinations or process risks based on `Material SDS` and potentially historical `Conversations`/`Experiments` data (e.g., "Warning: Mixing substance A and B can be exothermic.").
+  - **Standard Enforcement**: Validate user inputs and recipe definitions against predefined company standards and rules (e.g., format requirements, mandatory fields, incompatible materials). Reject or prompt for correction if standards are not met.
+  - **Advanced Knowledge Retrieval**: Answer complex queries by synthesizing information across `Recipes`, `Experiments`, and `Conversations` logs (e.g., "What were the common issues encountered when testing recipes similar to X?", "Summarize safety discussions related to substance Y last quarter.").
 
-### 2. Inventory & Pricing Management
+### 2. Recipe Management (via Agent)
 
-- **Purpose**: Support recipe creation and costing; part of organizational memory.
+- **Purpose**: Allow users to manage recipes through conversation while adhering to standards.
 - **Requirements**:
-  - Track materials: Name, Category, Quantity, Unit, Location, Price, Supplier, Stock Date, Expiration Date.
-  - Update inventory when used in recipes/tests; notify for low/expired stock.
-  - Calculate recipe costs from material prices.
-- **For Novices**: Explain pricing (e.g., "This affects your recipe's total cost").
+  - Agent can create, edit, retrieve, and list recipes based on user commands (e.g., "Create a recipe...", "Add X to recipe Y", "Show me recipe Z", "List my draft recipes").
+  - Agent understands recipe attributes (Name, Ingredients, Steps, Conditions, etc.) mentioned in user requests.
+  - **Validation**: Agent enforces validation rules during creation/editing (e.g., checks for required fields, valid units, adherence to company standards defined in configuration).
+  - **(Optional) Template Usage**: Agent may suggest or require the use of predefined recipe templates for certain processes to ensure standardization.
+  - Agent enforces versioning when recipes are modified.
+  - Agent provides recipe cost/yield information upon request.
 
-### 3. Experiment (Recipe Testing)
+### 3. Inventory Management (via Agent)
 
-- **Purpose**: Validate recipes and build a knowledge base.
+- **Purpose**: Allow users to query inventory through conversation.
 - **Requirements**:
-  - Log tests: Recipe ID, Date, Researcher, Materials Used, Results, Notes.
-  - Link to parent recipe; searchable for trends (organizational memory).
-- **For Novices**: Sample entries with design tips (e.g., "Test small batches first").
+  - Agent can report material details (Quantity, Location, Price) based on user queries (e.g., "How much water do we have?", "What's the price of acetone?").
+  - Agent informs backend services to update inventory when materials are used in recipes.
 
-### 4. Safety Data Sheets (SDS)
+### 4. Safety & SDS Management (via Agent)
 
-- **Purpose**: Ensure safety compliance, educate on safety, and archive knowledge.
+- **Purpose**: Provide safety information, manage SDS, and perform proactive checks via conversation.
 - **Requirements**:
-  - **Material SDS**: Store for each material (Hazards, Handling, Storage, First Aid, Disposal).
-  - **Generated SDS**: AI generates key sections for recipes:
-    - Hazards, Handling Precautions, Storage Requirements, First Aid Measures, Disposal Instructions.
-    - Includes confidence score; editable by chemists.
-  - Access SDS from recipes/inventory; archive versions (organizational memory).
-- **For Novices**: Emphasize safety with explanations (e.g., "Corrosive means it can burn skin").
+  - Agent can retrieve and display Material SDS information (e.g., "Show SDS for ethanol").
+  - Agent can trigger the generation of a recipe's SDS (e.g., "Generate SDS for recipe X").
+  - Agent allows Experienced Chemists to review and approve generated SDS via conversation (with appropriate confirmations).
+  - Agent can answer basic safety questions by querying the Safety Service (e.g., "What are the emergency contacts?").
+  - Agent presents risk level indicators when discussing recipes.
+  - **Proactive Hazard Identification**: Reinforces the agent's duty to identify and communicate potential hazards during recipe discussion, based on ingredient properties and process steps.
 
-### 5. AI Querying System
+### 5. User Management & Permissions (via Agent)
 
-- **Purpose**: Assist recipe creation, educate, and leverage memory.
+- **Purpose**: Control access and maintain audit trails through the agent.
 - **Requirements**:
-  - Answer questions on recipes, inventory, costs, SDS, and tests (e.g., "What's safe handling for Recipe X?").
-  - Simple responses for novices; log queries/answers (organizational memory).
-- **For Novices**: Suggest safety/design queries (e.g., "Ask: How do I make this safer?").
+  - Agent identifies the user and their role (Newcomer, Experienced).
+  - Agent restricts actions based on permissions (e.g., prevents Newcomers from finalizing SDS or editing others' recipes unless in draft).
+  - Authentication handled primarily at API Gateway / User Service level.
+  - **Detailed Auditing**: Key actions orchestrated by the agent (e.g., recipe status changes, SDS approval, critical edits) must be logged with user, timestamp, and context (potentially within the `Conversations` table or a dedicated audit log) for traceability.
 
-### 6. User Management
+### 6. Conversational Education & Guidance
 
-- **Purpose**: Control access and support education.
+- **Purpose**: Guide newcomers and enforce standards through conversation.
 - **Requirements**:
-  - User accounts: Name, Role ("Novice," "Experienced"), Email/Login.
-  - Permissions: Novices view/edit own drafts, access SDS; Experienced edit/finalize SDS, approve recipes.
-  - Track creators/editors (organizational memory).
-
-### 7. Educational Features
-
-- **Purpose**: Focus on teaching novices safety and recipe design.
-- **Requirements**:
-  - **Safety Education**:
-    - Inline guidance on SDS (e.g., "Why gloves matter for corrosives").
-    - Tutorials: "Handling Hazardous Materials," "Understanding SDS."
-  - **Recipe Design Education**:
-    - Tips in recipe editor (e.g., "Precise steps improve repeatability").
-    - Tutorials: "Building a Recipe," "Optimizing Yield."
-  - "Learn" section: Glossary (e.g., "Hazard: A potential danger"), case studies from past recipes/tests.
-  - AI offers educational feedback (e.g., "Add ventilation—Recipe X is flammable").
-
-### 8. Organizational Memory
-
-- **Purpose**: Preserve and utilize knowledge.
-- **Requirements**:
-  - Store recipes, tests, SDS, queries indefinitely; track changes.
-  - Search across all data (e.g., "Recipes with acetone, 2024").
-  - Export data (e.g., recipe + SDS) for records.
-
-### 9. Customer-Facing Recipe Summaries
-
-- **Purpose**: Enhance sellability of recipes.
-- **Requirements**:
-  - Generate summaries for each "Ready to Sell" recipe:
-    - Name, Description (e.g., "High-yield aspirin synthesis").
-    - Key Benefits (e.g., "90% yield, $5 cost per batch").
-    - Simplified SDS Highlights (e.g., "Safe with standard precautions").
-  - Export as PDF or shareable link for customers.
-  - Editable by experienced chemists to tailor for sales.
-- **For Novices**: Guidance on summaries (e.g., "Highlight what makes your recipe valuable").
+  - Agent provides contextual help and tips during recipe creation/editing for Newcomers.
+  - Agent proactively offers safety information relevant to the conversation.
+  - Agent can answer basic procedural questions (e.g., "How do I add an ingredient?").
+  - **Standard Guidance**: Agent explains company standards or validation rules when prompting users for corrections (e.g., "Please specify temperature in Celsius as per company standard.").
 
 ## Non-Functional Requirements
 
-- **Accessibility**: Web-based, mobile-friendly.
-- **Usability**: Intuitive for novices (guides, clear labels); efficient for experienced users (quick access).
-- **Performance**: Fast AI queries (<5 sec), real-time inventory updates.
-- **Scalability**: Handle growing recipes/users (100s+).
-- **Security**: Role-based access, backups, secure logins.
-- **Reliability**: Editable AI SDS with confidence scores for accuracy.
+- **Usability**: Conversational interface should be intuitive; agent must handle variations in user phrasing.
+- **Performance**: AI Agent response time (including NLU, orchestration, response generation, and knowledge retrieval) should be reasonably fast for a fluid conversation.
+- **Reliability**: High accuracy in NLU, action mapping, standard enforcement, and knowledge retrieval. Graceful handling of misunderstood requests. Robust confirmation for critical actions.
+- **Security**: Role-based permissions enforced by the agent before executing actions. Secure handling of user data.
+- **Safety**: Agent design prioritizes safety, avoiding misinterpretation of safety-critical commands. Agent must surface safety warnings appropriately and reliably perform proactive safety checks.
+- **Scalability**: AI Agent Service and backend microservices must scale to handle concurrent conversations.
+- **Accessibility**: Chat interface should adhere to web accessibility standards.
+- **Auditability**: Logs (e.g., `Conversations`) must be comprehensive enough to reconstruct critical decision paths and standard adherence.
