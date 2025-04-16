@@ -13,6 +13,7 @@ export default {
           { text: "SDS System", link: "/sds-system" },
           { text: "Architecture", link: "/architecture" },
           { text: "Database Entities", link: "/entities" },
+          { text: "Authentication & Workspaces", link: "/authentication" },
         ],
       },
     ],

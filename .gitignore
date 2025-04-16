@@ -2,11 +2,11 @@
 node_modules/
 
 # Build output
-.vitepress/dist/
+docs/.vitepress/dist/
 
 # Vite cache
-.vitepress/cache/
-.vite/
+docs/.vitepress/cache/
+docs/.vite/
 
 # Local env files
 .env
