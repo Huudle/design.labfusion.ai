@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the authentication flow for the labfusion.ai platform's first version (MVP). The system implements a simplified multi-tenant architecture where workspaces are pre-created by developers. Authentication is powered by [Supabase Auth](https://supabase.com/docs/guides/auth).
+This document outlines the authentication flow for the labXpert.ai platform's first version (MVP). The system implements a simplified multi-tenant architecture where workspaces are pre-created by developers. Authentication is powered by [Supabase Auth](https://supabase.com/docs/guides/auth).
 
 ## Authentication Flow with Supabase
 

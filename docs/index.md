@@ -1,6 +1,6 @@
-# Welcome to LabFusion.ai Documentation
+# Welcome to LabXpert.ai Documentation
 
-LabFusion.ai is a conversational AI system designed to help chemists create, manage, and refine chemical recipes while enforcing safety standards and leveraging organizational knowledge.
+LabXpert.ai is a conversational AI system designed to help chemists create, manage, and refine chemical recipes while enforcing safety standards and leveraging organizational knowledge.
 
 It enables users to:
 
@@ -41,7 +41,7 @@ It enables users to:
 
 ## Getting Started
 
-To begin using LabFusion.ai:
+To begin using LabXpert.ai:
 
 1. Review the [Requirements](/requirements) to understand system capabilities
 2. Explore the [Architecture](/architecture) to see how components interact

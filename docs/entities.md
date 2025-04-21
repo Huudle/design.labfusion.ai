@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the database structure and relationships for the labfusion.ai conversational AI system's first version (MVP). Each entity is designed to support multi-level organization, workspace isolation, conversational recipe management, proactive safety, standard enforcement, education, and organizational memory access. In this MVP, organizations and workspaces are pre-created by developers.
+This document outlines the database structure and relationships for the labXpert.ai conversational AI system's first version (MVP). Each entity is designed to support multi-level organization, workspace isolation, conversational recipe management, proactive safety, standard enforcement, education, and organizational memory access. In this MVP, organizations and workspaces are pre-created by developers.
 
 ## Entities
 

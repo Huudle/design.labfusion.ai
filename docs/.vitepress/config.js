@@ -1,9 +1,9 @@
 export default {
-  title: "labfusion.ai",
+  title: "labXpert.ai",
   description:
-    "Documentation for labfusion.ai chemical recipe management system",
+    "Documentation for labXpert.ai chemical recipe management system",
   themeConfig: {
-    siteTitle: "labfusion.ai",
+    siteTitle: "labXpert.ai",
     sidebar: [
       {
         text: "Documentation",
