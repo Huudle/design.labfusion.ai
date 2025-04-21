@@ -80,3 +80,54 @@ The conversational AI system will:
 - **Scalability**: AI Agent Service and backend microservices must scale to handle concurrent conversations.
 - **Accessibility**: Chat interface should adhere to web accessibility standards.
 - **Auditability**: Logs (e.g., `Conversations`) must be comprehensive enough to reconstruct critical decision paths and standard adherence.
+
+## Database Implementation
+
+### Conversations Table
+
+The `conversations` table stores the chat interactions between users and the AI agent:
+
+```sql
+CREATE TABLE public.conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id UUID REFERENCES public.workspaces(id) NOT NULL,
+    messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    profile_id UUID NOT NULL REFERENCES public.profiles(id),
+    is_canvas_created BOOLEAN NOT NULL DEFAULT false,
+    agent TEXT NOT NULL DEFAULT 'RECIPE_GENERATOR'::text,
+    title TEXT NULL,
+    canvas_content TEXT NULL
+);
+```
+
+- **Purpose**: Store complete conversation threads between users and the AI agent
+- **Key Fields**:
+
+  - `id`: Unique identifier for the conversation
+  - `workspace_id`: Ensures data isolation between workspaces
+  - `messages`: JSONB array containing the entire conversation history
+  - `profile_id`: Links to the user's profile
+  - `agent`: Type of AI agent used (e.g., 'RECIPE_GENERATOR')
+  - `title`: Optional conversation title for easy reference
+  - `is_canvas_created`: Flag indicating if a canvas visualization was created
+  - `canvas_content`: Optional storage for chemical structure visualizations
+
+- **Message Structure Example**:
+
+```json
+[
+  {
+    "role": "user",
+    "content": "Create a recipe for aspirin synthesis",
+    "timestamp": "2023-07-15T14:30:22Z"
+  },
+  {
+    "role": "assistant",
+    "content": "I'll help you create an aspirin synthesis recipe. What scale would you like to produce?",
+    "timestamp": "2023-07-15T14:30:25Z"
+  }
+]
+```
+
+This implementation maintains workspace isolation through the `workspace_id` field and supports the organizational memory requirements by storing complete conversation histories that can be analyzed for knowledge retrieval.

@@ -2,425 +2,552 @@
 
 ## Overview
 
-This document outlines the database structure and relationships for the labfusion.ai conversational AI system's first version (MVP). Each entity is designed to support workspace isolation, conversational recipe management, proactive safety, standard enforcement, education, and organizational memory access. In this MVP, workspaces are pre-created by developers.
+This document outlines the database structure and relationships for the labfusion.ai conversational AI system's first version (MVP). Each entity is designed to support multi-level organization, workspace isolation, conversational recipe management, proactive safety, standard enforcement, education, and organizational memory access. In this MVP, organizations and workspaces are pre-created by developers.
 
 ## Entities
 
-### 1. Workspaces
+### 1. Organizations
 
-- **Purpose**: Define isolated environments for teams/organizations, pre-created by developers.
+- **Purpose**: Top-level entity representing a company, institution, or group that contains multiple workspaces and folders.
 - **Attributes**:
   - `id`: Unique identifier.
+  - `name`: Organization name.
+  - `description`: Brief overview of the organization.
+  - `logo_url`: URL to the organization's logo.
+  - `created_at`: Creation timestamp.
+  - `configuration`: JSONB configuration for organization-level settings.
+- **DDL**:
+
+```sql
+CREATE TABLE organizations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    logo_url TEXT,
+    created_at TIMESTAMP DEFAULT now(),
+    configuration JSONB NOT NULL
+);
+```
+
+- **RLS Policy Example (Membership-Based)**:
+
+```sql
+-- Enable RLS on organizations
+ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow only users who are active members to read organizations
+CREATE POLICY "Members can read their organizations" ON organizations
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM profile_organizations
+      WHERE profile_organizations.organization_id = organizations.id
+        AND profile_organizations.profile_id = auth.uid()
+        AND profile_organizations.is_active = true
+    )
+  );
+```
+
+### 2. Workspaces
+
+- **Purpose**: Define isolated environments for teams/departments within an organization, pre-created by developers.
+- **Attributes**:
+  - `id`: Unique identifier.
+  - `organization_id`: Foreign key to the parent organization.
   - `name`: Workspace name.
   - `description`: Brief overview of the workspace purpose.
   - `custom_instructions`: Tailored instructions for the AI agent's behavior within this workspace.
-  - `agent_configurations`: JSONB field storing configurations for different agent types within the workspace.
   - `created_at`: Creation timestamp.
 - **DDL**:
 
 ```sql
 CREATE TABLE workspaces (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(255) NOT NULL,
+    organization_id UUID REFERENCES organizations(id) NOT NULL,
+    name TEXT NOT NULL,
     description TEXT,
     custom_instructions TEXT,
-    agent_configurations JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT now()
+);
+```
+
+- **RLS Policy Example (Membership-Based)**:
+
+```sql
+-- Enable RLS on workspaces
+ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow only users who are active members to read workspaces
+CREATE POLICY "Members can read their workspaces" ON workspaces
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM profile_workspaces
+      WHERE profile_workspaces.workspace_id = workspaces.id
+        AND profile_workspaces.profile_id = auth.uid()
+        AND profile_workspaces.is_active = true
+    )
+  );
+```
+
+### 3. Folders
+
+- **Purpose**: Organize resources within an organization (documents, templates, etc.).
+- **Attributes**:
+  - `id`: Unique identifier.
+  - `organization_id`: Foreign key to the parent organization.
+  - `parent_folder_id`: Self-reference for nested folders (NULL for top-level folders).
+  - `name`: Folder name.
+  - `description`: Optional description of the folder's contents.
+  - `created_at`: Creation timestamp.
+- **DDL**:
+
+```sql
+CREATE TABLE folders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID REFERENCES organizations(id) NOT NULL,
+    parent_folder_id UUID REFERENCES folders(id),
+    name TEXT NOT NULL,
+    description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
-- **Agent Configurations Structure**:
-  - JSONB object containing configuration for each agent type
-  - Example:
-  ```json
-  {
-    "workspace_agent": {
-      "model": "gpt-4",
-      "temperature": 0.2,
-      "enabled_tools": ["web_search", "file_search", "recipe_tools"]
-    },
-    "recipe_agent": {
-      "model": "gpt-4",
-      "temperature": 0.1,
-      "specialized_instructions": "Focus on pharmaceutical synthesis techniques...",
-      "enabled_tools": ["web_search", "recipe_tools", "inventory_tools"]
-    },
-    "safety_agent": {
-      "model": "gpt-4",
-      "temperature": 0.0,
-      "specialized_instructions": "Enforce FDA regulations and...",
-      "enabled_tools": ["web_search", "sds_tools"]
-    }
-  }
-  ```
+- **RLS Policy Example (Membership-Based)**:
 
-### 2. Profiles
+```sql
+-- Enable RLS on folders
+ALTER TABLE folders ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow only users who are active members of the organization to read folders
+CREATE POLICY "Members can read their organization's folders" ON folders
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM profile_organizations
+      WHERE profile_organizations.organization_id = folders.organization_id
+        AND profile_organizations.profile_id = auth.uid()
+        AND profile_organizations.is_active = true
+    )
+  );
+```
+
+### 4. Profiles
 
 - **Purpose**: Store application-specific user data and track creators/editors within the conversational agent.
 - **Attributes**:
-  - `id`: Unique identifier.
-  - `user_id`: Foreign key to Supabase auth.users table.
-  - `name`: User's full name.
+  - `id`: Primary key that matches the auth.users id (direct 1:1 relationship).
+  - `first_name`: User's first name.
+  - `last_name`: User's last name.
   - `email`: User's email (synchronized with auth.users).
-  - `created_at`: Timestamp.
-  - `assigned_workspace_id`: Assigned workspace (pre-configured by developers).
+  - `created_at`: Timestamp with time zone.
+  - `updated_at`: Last update timestamp with time zone.
 - **DDL**:
 
 ```sql
 CREATE TABLE profiles (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES auth.users(id) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    assigned_workspace_id UUID REFERENCES workspaces(id) NOT NULL,
-    UNIQUE(user_id)
+    id UUID PRIMARY KEY,  -- Same as auth.users.id
+    first_name TEXT NOT NULL,
+    last_name TEXT,
+    email TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 ```
 
-### 3. Materials (Inventory)
+- **RLS Policy Example (Self-Access)**:
 
-- **Purpose**: Track materials for recipes, pricing, and safety data.
+```sql
+-- Enable RLS on profiles
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Users can read their own profile
+CREATE POLICY "Users can read their own profile" ON profiles
+  FOR SELECT
+  USING (
+    id = auth.uid()
+  );
+```
+
+### 5. Profile Organizations
+
+- **Purpose**: Enable many-to-many relationship between profiles and organizations, allowing users to belong to multiple organizations.
 - **Attributes**:
   - `id`: Unique identifier.
-  - `workspace_id`: Link to Workspace (data isolation).
-  - `name`: Material name (e.g., "Acetone").
-  - `category`: Type (e.g., "Reagent").
-  - `quantity`: Amount in stock.
-  - `unit`: Measurement unit (e.g., "mL").
-  - `location`: Storage location.
-  - `price`: Cost per unit.
-  - `supplier`: Source of material.
-  - `stock_date`: When added to inventory.
-  - `expiration_date`: Expiry date (if applicable).
-  - `sds_id`: Link to Material SDS.
+  - `profile_id`: Foreign key to the profile.
+  - `organization_id`: Foreign key to the organization.
+  - `role`: User's role within the organization (e.g., "admin", "member").
+  - `is_active`: Flag indicating if the membership is active.
+  - `created_at`: Timestamp when the relationship was created.
 - **DDL**:
 
 ```sql
-CREATE TABLE materials (
+CREATE TABLE profile_organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID REFERENCES workspaces(id) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    category VARCHAR(50),
-    quantity DECIMAL NOT NULL,
-    unit VARCHAR(20) NOT NULL,
-    location VARCHAR(100),
-    price DECIMAL NOT NULL,
-    supplier VARCHAR(255),
-    stock_date DATE,
-    expiration_date DATE,
-    sds_id UUID REFERENCES material_sds(id)
+    profile_id UUID REFERENCES profiles(id) NOT NULL,
+    organization_id UUID REFERENCES organizations(id) NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    UNIQUE(profile_id, organization_id)
 );
+
+CREATE INDEX idx_profile_organizations_profile_id ON profile_organizations(profile_id);
+CREATE INDEX idx_profile_organizations_organization_id ON profile_organizations(organization_id);
 ```
 
-### 4. Material SDS
+- **RLS Policy Example (Self-Access)**:
 
-- **Purpose**: Store pre-existing safety data for materials, used by the agent for proactive checks, education, and AI-generated SDS.
+```sql
+-- Enable RLS on profile_organizations
+ALTER TABLE profile_organizations ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Users can read their own organization memberships
+CREATE POLICY "Users can read their own organization memberships" ON profile_organizations
+  FOR SELECT
+  USING (
+    profile_id = auth.uid()
+  );
+```
+
+### 6. Profile Workspaces
+
+- **Purpose**: Enable many-to-many relationship between profiles and workspaces, allowing users to belong to multiple workspaces.
 - **Attributes**:
   - `id`: Unique identifier.
-  - `workspace_id`: Link to Workspace (data isolation).
-  - `material_id`: Link to Material.
-  - `chemical_name`: Official name (e.g., "Acetone").
-  - `hazards`: Safety risks (JSON for flexibility).
-  - `handling`: Precautions.
-  - `storage`: Storage instructions.
-  - `first_aid`: Emergency measures.
-  - `disposal`: Disposal guidelines.
-  - `file_link`: URL to full SDS document.
-  - `last_updated`: For tracking updates.
+  - `profile_id`: Foreign key to the profile.
+  - `workspace_id`: Foreign key to the workspace.
+  - `role`: User's role within the workspace (e.g., "admin", "member").
+  - `is_active`: Flag indicating if the membership is active.
+  - `created_at`: Timestamp when the relationship was created.
 - **DDL**:
 
 ```sql
-CREATE TABLE material_sds (
+CREATE TABLE profile_workspaces (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    profile_id UUID REFERENCES profiles(id) NOT NULL,
     workspace_id UUID REFERENCES workspaces(id) NOT NULL,
-    material_id UUID REFERENCES materials(id) ON DELETE CASCADE,
-    chemical_name VARCHAR(255) NOT NULL,
-    hazards JSONB NOT NULL,
-    handling TEXT NOT NULL,
-    storage TEXT NOT NULL,
-    first_aid TEXT NOT NULL,
-    disposal TEXT NOT NULL,
-    file_link VARCHAR(255),
-    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    role TEXT NOT NULL DEFAULT 'member',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    UNIQUE(profile_id, workspace_id)
 );
+
+CREATE INDEX idx_profile_workspaces_workspace_id ON profile_workspaces(workspace_id);
+CREATE INDEX idx_profile_workspaces_profile_id ON profile_workspaces(profile_id);
 ```
 
-### 5. Recipes
+- **RLS Policy Example (Self-Access)**:
 
-- **Purpose**: Core entity for recipes managed via conversational commands, subject to standard enforcement and safety checks.
+```sql
+-- Enable RLS on profile_workspaces
+ALTER TABLE profile_workspaces ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Users can read their own workspace memberships
+CREATE POLICY "Users can read their own workspace memberships" ON profile_workspaces
+  FOR SELECT
+  USING (
+    profile_id = auth.uid()
+  );
+```
+
+### 7. Conversations
+
+- **Purpose**: Log conversations for auditing, debugging, agent improvement, and as a source for advanced knowledge retrieval about past discussions and decisions.
 - **Attributes**:
-  - `id`: Unique identifier.
+  - `id`: Unique identifier for the conversation.
   - `workspace_id`: Link to Workspace (data isolation).
-  - `name`: Recipe name.
-  - `description`: Brief overview.
-  - `ingredients`: Materials and quantities (JSON).
-  - `steps`: Procedure (array of text).
-  - `conditions`: Environmental factors (JSON).
-  - `yield`: Efficiency percentage.
-  - `cost`: Calculated cost.
-  - `creator_id`: Link to Profile.
+  - `messages`: JSONB array containing the entire conversation history.
   - `created_at`: Creation timestamp.
-  - `updated_at`: Last update timestamp.
-  - `status`: Workflow stage (e.g., "Draft").
-  - `version`: Version number for memory.
-  - `generated_sds_id`: Link to AI-generated SDS.
-- **DDL**:
-
-```sql
-CREATE TABLE recipes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID REFERENCES workspaces(id) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    ingredients JSONB NOT NULL,
-    steps TEXT[] NOT NULL,
-    conditions JSONB,
-    yield DECIMAL,
-    cost DECIMAL,
-    creator_id UUID REFERENCES profiles(id) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status VARCHAR(50) CHECK (status IN ('Draft', 'Tested', 'Ready to Sell')) DEFAULT 'Draft',
-    version INT DEFAULT 1,
-    generated_sds_id UUID REFERENCES generated_sds(id)
-);
-```
-
-### 6. Experiments (Recipe Tests)
-
-- **Purpose**: Validate recipes, capture structured test results, and provide data for the agent's knowledge retrieval about past performance and issues.
-- **Attributes**:
-  - `id`: Unique identifier.
-  - `workspace_id`: Link to Workspace (data isolation).
-  - `recipe_id`: Link to Recipe.
-  - `date`: Test date.
-  - `researcher_id`: Link to Profile.
-  - `materials_used`: Materials consumed (JSON).
-  - `results`: Outcome (e.g., yield).
-  - `notes`: Observations.
-- **DDL**:
-
-```sql
-CREATE TABLE experiments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID REFERENCES workspaces(id) NOT NULL,
-    recipe_id UUID REFERENCES recipes(id) ON DELETE CASCADE,
-    date DATE NOT NULL,
-    researcher_id UUID REFERENCES profiles(id) NOT NULL,
-    materials_used JSONB NOT NULL,
-    results JSONB,
-    notes TEXT
-);
-```
-
-### 7. Generated SDS
-
-- **Purpose**: Store AI-generated safety data for recipes, managed and reviewed via the conversational agent, contributing to safety checks.
-- **Attributes**:
-  - `id`: Unique identifier.
-  - `workspace_id`: Link to Workspace (data isolation).
-  - `recipe_id`: Link to Recipe.
-  - `generated_name`: Recipe-specific name (e.g., "Batch 001").
-  - `hazards`: Key safety risks (JSON).
-  - `handling`: Precautions.
-  - `storage`: Storage needs.
-  - `first_aid`: Emergency steps.
-  - `disposal`: Disposal instructions.
-  - `file_link`: Generated document URL.
-  - `confidence_score`: AI reliability (0-1).
-  - `status`: "Draft," "Reviewed," "Final."
-  - `created_at`: Generation timestamp.
-- **DDL**:
-
-```sql
-CREATE TABLE generated_sds (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID REFERENCES workspaces(id) NOT NULL,
-    recipe_id UUID REFERENCES recipes(id) ON DELETE CASCADE,
-    generated_name VARCHAR(255) NOT NULL,
-    hazards JSONB NOT NULL,
-    handling TEXT NOT NULL,
-    storage TEXT NOT NULL,
-    first_aid TEXT NOT NULL,
-    disposal TEXT NOT NULL,
-    file_link VARCHAR(255),
-    confidence_score DECIMAL CHECK (confidence_score BETWEEN 0 AND 1),
-    status VARCHAR(50) CHECK (status IN ('Draft', 'Reviewed', 'Final')) DEFAULT 'Draft',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-### 8. Conversations (Agent Interaction Log)
-
-- **Purpose**: Log conversational turns for auditing, debugging, agent improvement, and as a source for advanced knowledge retrieval about past discussions and decisions.
-- **Attributes**:
-  - `id`: Unique identifier for the conversation turn.
-  - `workspace_id`: Link to Workspace (data isolation).
-  - `session_id`: Identifier linking turns within a single conversation session.
-  - `user_id`: Link to auth.users via Profile.
-  - `user_input`: The text entered by the user.
-  - `agent_response`: The text response generated by the agent.
-  - `intent_detected`: The intent identified by the NLU (e.g., `create_recipe`).
-  - `entities_extracted`: Entities extracted by the NLU (JSON, e.g., `{"recipe_name": "Aspirin"}`).
-  - `action_taken`: Backend action orchestrated by the agent (e.g., `RecipeService.create`).
-  - `timestamp`: Timestamp of the interaction turn.
+  - `profile_id`: Link to the user's profile.
+  - `is_canvas_created`: Flag indicating if a canvas visualization was created.
+  - `agent`: Type of AI agent used (e.g., 'RECIPE_GENERATOR').
+  - `title`: Optional conversation title for easy reference.
+  - `canvas_content`: Optional storage for chemical structure visualizations.
+  - `organization_id`: Foreign key to the parent organization.
 - **DDL**:
 
 ```sql
 CREATE TABLE conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID REFERENCES workspaces(id) NOT NULL,
-    session_id UUID NOT NULL,
-    user_id UUID REFERENCES auth.users(id),
-    user_input TEXT,
-    agent_response TEXT,
-    intent_detected VARCHAR(100),
-    entities_extracted JSONB,
-    action_taken VARCHAR(255),
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
--- Indexes for faster queries
-CREATE INDEX idx_conversations_session_id ON conversations(session_id);
-CREATE INDEX idx_conversations_workspace_id ON conversations(workspace_id);
-CREATE INDEX idx_conversations_user_id ON conversations(user_id);
-```
-
-### 9. Standard Rules
-
-- **Purpose**: Store configurable standards and validation rules enforced by the AI agent, scoped to workspaces.
-- **Attributes**:
-  - `id`: Unique identifier.
-  - `workspace_id`: Link to Workspace (data isolation).
-  - `rule_name`: Descriptive name (e.g., "ConcentrationFormat", "MandatorySafetyNote").
-  - `rule_type`: Type of rule (e.g., "Regex", "PresenceCheck", "Compatibility").
-  - `configuration`: Rule details (JSON, e.g., `{"pattern": "\\d+M"}`, `{"field": "steps.safety_note"}`).
-  - `error_message`: Message for the agent to use when rule is violated.
-  - `is_active`: Boolean flag.
-- **DDL**:
-
-```sql
-CREATE TABLE standard_rules (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID REFERENCES workspaces(id) NOT NULL,
-    rule_name VARCHAR(100) NOT NULL,
-    rule_type VARCHAR(50) NOT NULL,
-    configuration JSONB,
-    error_message TEXT,
-    is_active BOOLEAN DEFAULT true,
-    UNIQUE(workspace_id, rule_name)
+    messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    profile_id UUID NOT NULL REFERENCES profiles(id),
+    is_canvas_created BOOLEAN NOT NULL DEFAULT false,
+    agent TEXT NOT NULL DEFAULT 'RECIPE_GENERATOR'::text,
+    title TEXT NULL,
+    canvas_content TEXT NULL,
+    organization_id UUID REFERENCES organizations(id) NOT NULL
 );
 ```
 
-### 10. Audit Log
+- **Message Structure Example**:
 
-- **Purpose**: Explicitly log critical actions and decisions for compliance and traceability, supplementing the general `Conversations` log.
+```json
+[
+  {
+    "role": "user",
+    "content": "Create a recipe for aspirin synthesis",
+    "timestamp": "2023-07-15T14:30:22Z"
+  },
+  {
+    "role": "assistant",
+    "content": "I'll help you create an aspirin synthesis recipe. What scale would you like to produce?",
+    "timestamp": "2023-07-15T14:30:25Z"
+  }
+]
+```
+
+- **RLS Policy Example (Membership-Based)**:
+
+```sql
+-- Enable RLS on conversations
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow only users who are active members of the workspace or organization to read, update, insert, or delete conversations
+CREATE POLICY "Members can read their workspace's conversations" ON conversations
+  FOR SELECT
+  TO authenticated
+  USING (
+    ((workspace_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM profile_workspaces pw
+      WHERE pw.workspace_id = conversations.workspace_id
+        AND pw.profile_id = auth.uid()
+        AND pw.is_active
+    )) OR (workspace_id IS NULL AND EXISTS (
+      SELECT 1 FROM profile_organizations po
+      WHERE po.organization_id = conversations.organization_id
+        AND po.profile_id = auth.uid()
+        AND po.is_active
+    )))
+  );
+CREATE POLICY "Members can update their workspace's conversations" ON conversations
+  FOR UPDATE
+  TO authenticated
+  USING (
+    ((workspace_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM profile_workspaces pw
+      WHERE pw.workspace_id = conversations.workspace_id
+        AND pw.profile_id = auth.uid()
+        AND pw.is_active
+    )) OR (workspace_id IS NULL AND EXISTS (
+      SELECT 1 FROM profile_organizations po
+      WHERE po.organization_id = conversations.organization_id
+        AND po.profile_id = auth.uid()
+        AND po.is_active
+    )))
+  )
+  WITH CHECK (
+    ((workspace_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM profile_workspaces pw
+      WHERE pw.workspace_id = conversations.workspace_id
+        AND pw.profile_id = auth.uid()
+        AND pw.is_active
+    )) OR (workspace_id IS NULL AND EXISTS (
+      SELECT 1 FROM profile_organizations po
+      WHERE po.organization_id = conversations.organization_id
+        AND po.profile_id = auth.uid()
+        AND po.is_active
+    )))
+  );
+CREATE POLICY "Members can insert to their workspace's conversations" ON conversations
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    ((workspace_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM profile_workspaces pw
+      WHERE pw.workspace_id = conversations.workspace_id
+        AND pw.profile_id = auth.uid()
+        AND pw.is_active
+    )) OR (workspace_id IS NULL AND EXISTS (
+      SELECT 1 FROM profile_organizations po
+      WHERE po.organization_id = conversations.organization_id
+        AND po.profile_id = auth.uid()
+        AND po.is_active
+    )))
+  );
+CREATE POLICY "Members can delete their workspace's conversations" ON conversations
+  FOR DELETE
+  TO authenticated
+  USING (
+    ((workspace_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM profile_workspaces pw
+      WHERE pw.workspace_id = conversations.workspace_id
+        AND pw.profile_id = auth.uid()
+        AND pw.is_active
+    )) OR (workspace_id IS NULL AND EXISTS (
+      SELECT 1 FROM profile_organizations po
+      WHERE po.organization_id = conversations.organization_id
+        AND po.profile_id = auth.uid()
+        AND po.is_active
+    )))
+  );
+```
+
+### 8. Files
+
+- **Purpose**: Store files related to conversations, recipes, and other resources.
 - **Attributes**:
   - `id`: Unique identifier.
+  - `created_at`: Creation timestamp.
+  - `organization_id`: Foreign key to the parent organization.
   - `workspace_id`: Link to Workspace (data isolation).
-  - `timestamp`: Time of the event.
-  - `user_id`: User performing the action (via auth.users).
-  - `action_type`: Type of critical action (e.g., "SDS_Approve", "Recipe_Status_Change", "Safety_Warning_Acknowledge").
-  - `entity_id`: ID of the affected entity (e.g., recipe ID, SDS ID).
-  - `details`: Contextual details (JSON, e.g., `{"old_status": "Draft", "new_status": "Ready to Sell"}`).
-  - `conversation_turn_id`: Link to the relevant turn in the `Conversations` table (optional).
+  - `profile_id`: Reference to the profile that owns this file.
+  - `folder_id`: Reference to folder containing this file.
+  - `name`: File name.
+  - `description`: Optional description of the file.
+  - `file_link`: URL to the file.
+  - `signed_url`: URL for accessing the file.
+  - `bucket_path`: Path to file in storage bucket.
+  - `document_type`: Type of document (e.g., PDF, spreadsheet).
+  - `status`: Processing status of the file.
+  - `openai_file_id`: ID of file in OpenAI system if uploaded.
+  - `openai_vector_store_id`: Reference to vector store containing embeddings.
+  - `metadata`: Additional file metadata in JSON format.
 - **DDL**:
 
 ```sql
-CREATE TABLE audit_log (
+CREATE TABLE files (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    organization_id UUID NOT NULL REFERENCES organizations(id),
     workspace_id UUID REFERENCES workspaces(id) NOT NULL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    user_id UUID REFERENCES auth.users(id),
-    action_type VARCHAR(100) NOT NULL,
-    entity_id UUID,
-    details JSONB,
-    conversation_turn_id UUID REFERENCES conversations(id)
+    profile_id UUID NOT NULL REFERENCES profiles(id),
+    folder_id UUID REFERENCES folders(id),
+    name TEXT NOT NULL,
+    description TEXT,
+    file_link TEXT NOT NULL,
+    signed_url TEXT NOT NULL,
+    bucket_path TEXT,
+    document_type TEXT,
+    status TEXT,
+    openai_file_id TEXT,
+    openai_vector_store_id TEXT REFERENCES vector_stores(openai_vector_store_id),
+    metadata JSONB
 );
-CREATE INDEX idx_audit_log_workspace_id ON audit_log(workspace_id);
-CREATE INDEX idx_audit_log_user_id ON audit_log(user_id);
+
+CREATE INDEX idx_files_profile_id ON files(profile_id);
+CREATE INDEX idx_files_folder_id ON files(folder_id);
+```
+
+- **RLS Policy Example (Membership-Based)**:
+
+```sql
+-- Enable RLS on files
+ALTER TABLE files ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow only users who are active members of the organization to read files
+CREATE POLICY "Members can read their organization's files" ON files
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM profile_organizations
+      WHERE profile_organizations.organization_id = files.organization_id
+        AND profile_organizations.profile_id = auth.uid()
+        AND profile_organizations.is_active = true
+    )
+  );
+```
+
+### 9. Vector Stores
+
+- **Purpose**: Store information about vector embeddings collections used for semantic search and retrieval.
+- **Attributes**:
+  - `id`: Unique identifier.
+  - `openai_vector_store_id`: External ID in OpenAI service.
+  - `created_at`: Creation timestamp.
+  - `name`: Name of the vector store.
+  - `description`: Optional description.
+  - `metadata`: Additional metadata in JSON format.
+  - `organization_id`: Foreign key to the parent organization.
+  - `workspace_id`: Foreign key to the workspace.
+- **DDL**:
+
+```sql
+CREATE TABLE vector_stores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    openai_vector_store_id TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    name TEXT NOT NULL,
+    description TEXT,
+    metadata JSONB,
+    organization_id UUID REFERENCES organizations(id),
+    workspace_id UUID REFERENCES workspaces(id)
+);
+```
+
+- **RLS Policy Example (Membership-Based)**:
+
+```sql
+-- Enable RLS on vector_stores
+ALTER TABLE vector_stores ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow only users who are active members of the organization to read vector stores
+CREATE POLICY "Members can read their organization's vector stores" ON vector_stores
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM profile_organizations
+      WHERE profile_organizations.organization_id = vector_stores.organization_id
+        AND profile_organizations.profile_id = auth.uid()
+        AND profile_organizations.is_active = true
+    )
+  );
+```
+
+### 10. Tool Conversation
+
+- **Purpose**: Log tool calls associated with conversations for audit, traceability, or agent actions.
+- **Attributes**:
+  - `tool_call_id`: Unique identifier for the tool call (text, PK).
+  - `conversation_id`: Foreign key to the conversation (uuid).
+  - `created_at`: Timestamp when the tool call was logged.
+  - `tool_name`: Name of the tool invoked.
+  - `data`: JSONB payload with tool call details.
+- **DDL**:
+
+```sql
+CREATE TABLE tool_conversation (
+    tool_call_id TEXT PRIMARY KEY,
+    conversation_id UUID NOT NULL REFERENCES conversations(id),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    tool_name TEXT NOT NULL,
+    data JSONB
+);
+```
+
+- **RLS Policy Example (Membership-Based)**:
+
+```sql
+-- Enable RLS on tool_conversation
+ALTER TABLE tool_conversation ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow only users who are active members of the workspace to read tool calls
+CREATE POLICY "Members can read their workspace's tool calls" ON tool_conversation
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM conversations
+      JOIN profile_workspaces ON conversations.workspace_id = profile_workspaces.workspace_id
+      WHERE conversations.id = tool_conversation.conversation_id
+        AND profile_workspaces.profile_id = auth.uid()
+        AND profile_workspaces.is_active = true
+    )
+  );
 ```
 
 ## Relationships
 
-- **Profiles ↔ Auth Users**: One-to-one (each profile links to exactly one Supabase auth user).
-- **Profiles ↔ Assigned Workspace**: Many-to-one (each profile is assigned to exactly one workspace by developers).
-- **Workspaces ↔ All Data Entities**: One-to-many (each workspace contains its own isolated set of recipes, materials, SDS, conversations, etc.).
-- **Profiles ↔ Recipes**: One-to-many (one profile creates many recipes), constrained by workspace.
-- **Materials ↔ Material SDS**: One-to-one (each material has one SDS), constrained by workspace.
-- **Recipes ↔ Materials**: Many-to-many via `ingredients` JSON, constrained by workspace.
-- **Recipes ↔ Experiments**: One-to-many (one recipe has many tests), constrained by workspace.
-- **Recipes ↔ Generated SDS**: One-to-one (each recipe gets one SDS), constrained by workspace.
-- **Workspace ↔ Standard Rules**: One-to-many (each workspace defines its own validation rules).
-- **Auth Users ↔ Conversations**: One-to-many (one user has many conversation turns), constrained by workspace.
-- **Audit Log**: Links to Auth Users, Conversations, and conceptually to other entities via `entity_id`; all constrained by workspace.
-
-## How Entities Support Goals
-
-- **Workspace Isolation**: All data is partitioned by `workspace_id`, ensuring teams work in their own secure environments with private data.
-- **Workspace-Specific AI Behavior**: Each workspace's `custom_instructions` guides the AI agent's responses and capabilities, allowing for tailored experiences across different teams.
-- **Agent Configuration Flexibility**: The `agent_configurations` field enables precise control over each agent's behavior, model selection, tool availability, and specialized instructions within each workspace.
-- **Conversational Recipe Management**: `Recipes`, `Materials`, `Profiles` are manipulated by the AI Agent, guided by workspace-specific `Standard Rules` and logged in `Conversations` and `Audit Log`.
-- **Conversational Education & Safety**: `Material SDS`, `Generated SDS`, and safety data are used by the agent for guidance and proactive checks within the workspace context.
-- **Organizational Memory & Knowledge Retrieval**: `Recipes` (versioned), `Experiments`, and `Conversations` provide the raw data for knowledge retrieval, scoped to the workspace for relevance and security.
-
-## Supabase Integration
-
-This schema is designed to work with Supabase, where:
-
-- Authentication is handled by Supabase Auth (auth schema)
-- `profiles` table extends the built-in `auth.users` table with application-specific data
-- Row Level Security (RLS) policies are applied to all tables to enforce workspace isolation
-- Auth hooks automatically create profile records when new users are registered
-
-## Integration with Conversational AI
-
-The AI agent operates within the context of the user's assigned workspace:
-
-1. **Workspace-Specific Instructions**
-
-   - AI agent reads `custom_instructions` from the workspace table at the start of each conversation
-   - These instructions guide the agent's tone, style, safety protocols, and domain-specific behaviors
-   - All responses are tailored according to these workspace-level instructions
-
-2. **Agent Configuration**
-
-   - System reads `agent_configurations` from the workspace table
-   - Different agents are dynamically created based on these configurations
-   - Each agent type (Workspace, Recipe, Safety, Knowledge) can have custom settings:
-     - Model selection (e.g., GPT-4 for critical agents)
-     - Temperature settings for response variability
-     - Enabled tools specific to each agent
-     - Specialized instructions beyond the general workspace instructions
-
-3. **Session Context**
-   - AI agent receives user's JWT from Supabase with each request
-   - JWT contains assigned workspace context
-   - All data retrieval and mutations respect workspace boundaries through RLS
-
-## Future Enhancements (Post-MVP)
-
-For future releases, the database structure will be extended to support:
-
-1. **Self-Service Workspace Creation**
-
-   - Adding owner relationship to workspaces
-   - Workspace customization options
-   - UI for editing custom instructions
-   - Self-service agent configuration interface
-
-2. **Workspace Membership**
-
-   - Implementation of `workspace_members` table
-   - Role-based permissions within workspaces
-
-3. **Role Management**
-
-   - Enhanced user roles (Admin, Member)
-   - Chemistry-specific roles (Newcomer, Experienced)
-   - Role-based access to agent configuration
-
-4. **Multi-Workspace Support**
-   - Allowing users to belong to multiple workspaces
-   - Supporting workspace switching via `current_workspace_id`
-   - Workspace-specific agent configuration templates
+- **Organizations ↔ Workspaces**: One-to-many (one organization contains many workspaces).
+- **Organizations ↔ Folders**: One-to-many (one organization contains many folders).
+- **Folders ↔ Folders**: Self-referential for nested folders (parent-child relationship).
+- **Folders ↔ Files**: One-to-many (folders can contain multiple files).
+- **Profiles ↔ Auth Users**: One-to-one (profiles.id = auth.users.id for a direct relationship).
+- **Profiles ↔ Organizations**: Many-to-many via `profile_organizations` table (profiles can belong to multiple organizations with different roles).
+- **Profiles ↔ Primary Workspace**: Many-to-one (legacy: each profile was assigned to exactly one workspace through workspace_id).
+- **Profiles ↔ Workspaces**: Many-to-many via `profile_workspaces` table (profiles can belong to multiple workspaces with different roles).
+- **Profiles ↔ Files**: One-to-many (users can own multiple files).
+- **Workspaces ↔ All Data Entities**: One-to-many (each workspace contains its own isolated set of conversations, files, etc.).
+- **Vector Stores ↔ Files**: One-to-many (embeddings collection can be associated with multiple files).
+- **Conversations ↔ Tool Conversation**: One-to-many (each conversation can have multiple tool call logs).

@@ -41,8 +41,8 @@
 
 [Data Layer]
    ├── PostgreSQL Database (Supabase)
-   │    ├── Tables: profiles, workspaces, materials, material_sds, recipes, generated_sds, experiments, conversations, standards_rules, audit_log
-   │    └── Metadata only: SDS references, document metadata (actual PDFs stored in OpenAI Vector Stores)
+   │    ├── Tables: organizations, workspaces, folders, profiles, profile_organizations, profile_workspaces, conversations, files, vector_stores
+   │    └── Metadata only: document metadata (actual PDFs stored in OpenAI Vector Stores)
    ├── OpenAI Vector Stores
    │    ├── Document Storage: SDS PDFs, recipe PDFs, lab notes, technical documents
    │    └── Vector Embeddings: For semantic search via FileSearchTool
